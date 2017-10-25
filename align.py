@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 import scipy.io.wavfile
 import numpy as np
 from subprocess import call
@@ -12,10 +11,11 @@ import argparse
 def extract_audio(in_file):
 	filename, file_ext = os.path.splitext(in_file)
 	output = filename + "_MONO.wav"
-	cmd_line = ["avconv", "-y", "-i", in_file, "-vn", "-ac", "1", "-f", "wav", output]
+	cmd_line = ["ffmpeg", "-y", "-i", in_file, "-vn", "-ac", "1", "-f", "wav", output]
 	print cmd_line
 	call(cmd_line)
 	return output
+
 
 # Read file
 # INPUT: Audio file
@@ -155,51 +155,68 @@ def align(av_base, av_file, fft_bin_size=1024, overlap=0, box_height=512, box_wi
 		return (abs(seconds), 0 )
 
 # trim av file
-def trim_av(in_file, seconds, head=True):
+def trim_av(in_file, seconds, len=''):
 	filename, file_ext = os.path.splitext(in_file)
 	out_file = filename + "_TRIMED" + file_ext
 	time_s = '%.3f' % (seconds) #22.115
-	cmd_line = ["avconv", "-y", "-ss", time_s, "-i", in_file, "-codec", "copy", out_file]
+	if len :
+		cmd_line = ["ffmpeg", "-t", len, "-y", "-ss", time_s, "-i", in_file, "-vcodec", "libx264", "-crf", "18", "-c:a", "copy", out_file]
+	else:
+		cmd_line = ["ffmpeg", "-y", "-ss", time_s, "-i", in_file, "-codec", "copy", out_file]
 	print cmd_line
 	call(cmd_line)
 	return out_file
 
 def replace_audio(video_file, wav_file):
 	filename, file_ext = os.path.splitext(video_file)
-	out_file = filename + "_Av_" + file_ext
-	cmd_line = ["avconv", "-y", "-i", video_file, "-i", wav_file, "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", "-strict", "experimental",
+	out_file = filename + "_Av" + file_ext
+	cmd_line = ["ffmpeg", "-y", "-i", video_file, "-i", wav_file, "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", 
+"-strict", "experimental",
 	"-map", "0:v", "-map", "1:a", "-shortest", out_file]
 	print cmd_line
 	call(cmd_line)
 
 if __name__ == '__main__':
-
 	parser = argparse.ArgumentParser()
 	parser.add_argument('audio', help='audio file ./path/audio_name.ext')
 	parser.add_argument('video', help='video file ./path/video_name.ext')
-
+	parser.add_argument('-v', help='video file pop sound start second')
+	parser.add_argument('-a', help='audio file pop sound start second')
+	parser.add_argument('-l', help='final video length in second')
+	
 	args = parser.parse_args()
+	if args.v :
+		tv = args.v
+		t_file = float(args.v)
+	if args.a :
+		ta = args.a
+		t_base = float(args.a)
+	if args.l :
+		len = args.l
+
 	av_base = args.audio
 	av_file = args.video
 
 	#av_base = "./media/Waltz_r.wav"
 	#av_file = "./media/Waltz_v1.mp4"
 
-	t_base, t_file = align(av_base, av_file)
+	if not args.v:
+		t_base, t_file = align(av_base, av_file)
+
 	if t_base + t_file < 0.2:
 		print "Time difference is less than 0.2 second, no action."
 		quit()
-
 	av_base_trimed = av_base;
 	av_file_trimed = av_file;
-	if (t_base != 0):
+	if (t_base != 0): #audio
+		print "------ %s will be trimed from %.3f second ---" % (av_base, t_base)
 		av_base_trimed = trim_av(av_base, t_base)
-		print "--- %s will be trimed from %.3f second ---" % (av_base, t_base)
 	if (t_file != 0):
-		av_file_trimed = trim_av(av_file, t_file)
-		print "--- %s will be trimed from %.3f second ---" % (av_file, t_file)
-
+		print "------ %s will be trimed from %.3f second ---" % (av_file, t_file)
+		av_file_trimed = trim_av(av_file, t_file, len)
+	print "------ Audio start @", t_base, ", video start @", t_file
 	replace_audio(av_file_trimed, av_base_trimed)
 
+#ffmpeg -y -t 57 -ss 4.634 -i DSC_3554.MOV -ss 9.535 -i DSC_3554_Ryan_1.wav -c:v libx264 -crf 18 -c:a aac -b:a 256k -map 0:v -map 1:a -shortest -strict -2 DSC_3554_Av.MOV
 
-
+#ffmpeg -y -t 78 -ss 6.841 -i DSC_3557.MOV -ss 31.380 -i DSC_3557_Eleanor_1.wav -c:v libx264 -crf 18 -c:a aac -b:a 256k -map 0:v -map 1:a -shortest -strict -2 DSC_3557_Av.MOV
