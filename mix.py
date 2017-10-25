@@ -43,6 +43,6 @@ if __name__ == '__main__':
 	cmd_line += ["-map", "0:a", "-map", "1:v", "-y", output]
 
 	print ' '.join(str(e) for e in cmd_line)
-#	call(cmd_line)
+	call(cmd_line)
 # ./mix.py "./media/DSC_3554_Ryan_1.wav" "./media/DSC_3554.MOV" -a 9.535 -v 4.634 -t 57 -m
-# ffmpeg -y -t 57 -ss 4.634 -i DSC_3554.MOV -ss 9.535 -i DSC_3554_Ryan_1.wav -c:v libx264 -crf 18 -c:a aac -b:a 256k -map 0:v -map 1:a -shortest -strict -2 DSC_3554_Av.MOV
+# ffmpeg -t 57 -ss 9.535 -i ./media/DSC_3554_Ryan_1.wav -ss 4.634 -i ./media/DSC_3554.MOV -c:v libx264 -crf 18 -profile:v main -level 3.1 -vf scale=iw/2:-1 -c:a aac -b:a 256k -strict -2 -map 0:a -map 1:v -y ./media/DSC_3554_Ryan_1.mp4
