@@ -11,8 +11,8 @@ import argparse
 def extract_audio(in_file):
 	filename, file_ext = os.path.splitext(in_file)
 	output = filename + "_MONO.wav"
-	cmd_line = ["ffmpeg", "-y", "-i", in_file, "-vn", "-ac", "1", "-f", "wav", output]
-	print cmd_line
+	cmd_line = ["ffmpeg", "-y", "-i", in_file, "-vn", "-ac", "1", "-c:a", "pcm_s16le", "-ar", "44100", output]
+	print ' '.join(str(e) for e in cmd_line)
 	call(cmd_line)
 	return output
 
@@ -135,6 +135,8 @@ def align(av_base, av_file, fft_bin_size=1024, overlap=0, box_height=512, box_wi
 	bins_dict1 = make_horiz_bins(raw_audio1[:rate*120], fft_bin_size, overlap, box_height) #bins, overlap, box height
 	boxes1 = make_vert_bins(bins_dict1, box_width)  # box width
 	ft_dict1 = find_bin_max(boxes1, samples_per_box)  # samples per box
+	print "=======================ft_dict1============================="
+	print ft_dict1
 
 	# Process second file
 	wavfile2 = extract_audio(av_file)
@@ -142,6 +144,8 @@ def align(av_base, av_file, fft_bin_size=1024, overlap=0, box_height=512, box_wi
 	bins_dict2 = make_horiz_bins(raw_audio2[:rate*60], fft_bin_size, overlap, box_height)
 	boxes2 = make_vert_bins(bins_dict2, box_width)
 	ft_dict2 = find_bin_max(boxes2, samples_per_box)
+	print "=======================ft_dict2============================="
+	print ft_dict2
 
 	# Determie time delay
 	pairs = find_freq_pairs(ft_dict1, ft_dict2)
@@ -217,6 +221,8 @@ if __name__ == '__main__':
 	print "------ Audio start @", t_base, ", video start @", t_file
 	replace_audio(av_file_trimed, av_base_trimed)
 
+	# ./align.py ./media/DSC_3554_Ryan_1.wav ./media/DSC_3554.MOV
+	# ./align.py ./media/DSC_3555_Ryan_2.wav ./media/DSC_3555.MOV
 #ffmpeg -y -t 57 -ss 4.634 -i DSC_3554.MOV -ss 9.535 -i DSC_3554_Ryan_1.wav -c:v libx264 -crf 18 -c:a aac -b:a 256k -map 0:v -map 1:a -shortest -strict -2 DSC_3554_Av.MOV
 
 #ffmpeg -y -t 78 -ss 6.841 -i DSC_3557.MOV -ss 31.380 -i DSC_3557_Eleanor_1.wav -c:v libx264 -crf 18 -c:a aac -b:a 256k -map 0:v -map 1:a -shortest -strict -2 DSC_3557_Av.MOV
