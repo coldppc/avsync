@@ -16,7 +16,7 @@ if __name__ == '__main__':
 	parser.add_argument('-v', help='pop sound start second in video file ')
 	parser.add_argument('-t', help='final video duration in second')
 	parser.add_argument('-m', help='iOS compatible with iPhone4/iPad/Apple TV 2', action="store_true")
-	
+
 	args = parser.parse_args()
 	if args.v :
 		v_start = args.v
@@ -33,8 +33,10 @@ if __name__ == '__main__':
 		a_start, v_start = align(av_audio, av_video)
 
 	filename, file_ext = os.path.splitext(av_audio)
+	if args.m :
+		filename += ".m"
 	output = filename + ".mp4"
-	
+
 	cmd_line += ["-ss", a_start, "-i", av_audio, "-ss", v_start, "-i", av_video]
 	cmd_line +=	["-c:v", "libx264", "-crf", "18"]
 	if args.m :

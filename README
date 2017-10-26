@@ -9,6 +9,9 @@ sudo apt-get install ffmpeg
 -- install scipy
 sudo apt-get install python-numpy python-scipy
 
+-- example
+$ avsync/mix.py DSC_3554_Ryan_1.wav DSC_3554.MOV -a 9.435 -v 4.634 -t 57 -m
+
 reference
 
 https://raw.githubusercontent.com/allisonnicoledeal/VideoSync/master/alignment_by_row_channels.py
