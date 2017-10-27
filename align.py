@@ -6,8 +6,7 @@ import math
 import os
 import argparse
 
-# Extract audio from video file, save as wav auido file
-# INPUT: Video file
+# Extract audio from video file, convert to fixed sample rate mono
 def extract_audio(in_file):
 	filename, file_ext = os.path.splitext(in_file)
 	output = filename + "_MONO.wav"
@@ -15,15 +14,6 @@ def extract_audio(in_file):
 	print ' '.join(str(e) for e in cmd_line)
 	call(cmd_line)
 	return output
-
-
-# Read file
-# INPUT: Audio file
-# OUTPUT: Sets sample rate of wav file, Returns data read from wav file (numpy array of integers)
-def read_audio(audio_file):
-	rate, data = scipy.io.wavfile.read(audio_file)  # Return the sample rate (in samples/sec) and data from a WAV file
-	return data, rate
-
 
 def make_horiz_bins(data, fft_bin_size, overlap, box_height):
 	horiz_bins = {}
@@ -80,18 +70,20 @@ def make_vert_bins(horiz_bins, box_width):
 
 	return boxes
 
-
+# find maxes_per_box max intensity points in every box, put them into freq_dict
+# freqs_dict = { freq 0: [t01, t02...], freq 1:[t11, t12, ...], freq x:[tx1, tx2, ....]
 def find_bin_max(boxes, maxes_per_box):
 	freqs_dict = {}
-	for key in boxes.keys():
-		max_intensities = [(1,2,3)]
-		for i in range(len(boxes[key])):
+	for key in boxes.keys(): # for every freq in boxes
+		max_intensities = [(1,2,3)] # [(intensity, x, y)]
+		for i in range(len(boxes[key])): # for every t in given freq
 			if boxes[key][i][0] > min(max_intensities)[0]:
 				if len(max_intensities) < maxes_per_box:  # add if < number of points per box
 					max_intensities.append(boxes[key][i])
 				else:  # else add new number and remove min
 					max_intensities.append(boxes[key][i])
 					max_intensities.remove(min(max_intensities))
+		# add max_intensities of the freq (num < maxes_per_box) to freq dict
 		for j in range(len(max_intensities)):
 			if freqs_dict.has_key(max_intensities[j][2]):
 				freqs_dict[max_intensities[j][2]].append(max_intensities[j][1])
@@ -111,7 +103,16 @@ def find_freq_pairs(freqs_dict_orig, freqs_dict_sample):
 
 	return time_pairs
 
-
+# example
+# freq1_orig: Pt1, Pt2
+# freq1_orig: 6,   7
+# freq1_samp: Qtx, Qt1, Qt2, Qty
+# freq1_samp: 11,  16,  17,  20
+# time_pairs: (Pt1, Qtx), (Pt1, Qt1), (Pt1, Qt2), (Pt1, Qty), (Pt2, Qtx), (Pt2, Qt1), (Pt2, Qt2), (Pt2, Qty)
+# delta_t:    Pt1-Qtx,    -T,         -T - rate,  Pt1-Qty,    Pt2-Qtx,    -T + rate,   -T         Pt2-Qty
+# delta_t:    -5,         -10,        -11,        -14,        -4,         -9,         -10         -13
+# t_diffs:    {[-5: 1], [-10: 2], [-11: 1], [-14: 1], ...}
+# found max count is '2', delay is '-10', max should be the count of overlaped intensities
 def find_delay(time_pairs):
 	t_diffs = {}
 	for i in range(len(time_pairs)):
@@ -121,34 +122,38 @@ def find_delay(time_pairs):
 		else:
 			t_diffs[delta_t] = 1
 	t_diffs_sorted = sorted(t_diffs.items(), key=lambda x: x[1])
-	#print t_diffs_sorted
+
+	for t in t_diffs_sorted[-10:]:
+		print "Time diff: %4d K samples, hit %3d times" % (t[0], t[1])
+
 	time_delay = t_diffs_sorted[-1][0]
 
 	return time_delay
 
-
-# Find time delay between two video files
-def align(av_base, av_file, fft_bin_size=1024, overlap=0, box_height=512, box_width=43, samples_per_box=7):
+# Find time delay between two files
+def align(av_base, av_file, fft_bin_size=1024, overlap=0, box_height=512, box_width=43, samples_per_box=7, match_len=30):
 	# Process first file
 	wavfile1 = extract_audio(av_base)
-	raw_audio1, rate = read_audio(wavfile1)
-	bins_dict1 = make_horiz_bins(raw_audio1[:rate*120], fft_bin_size, overlap, box_height) #bins, overlap, box height
+	rate, raw_audio1 = scipy.io.wavfile.read(wavfile1)
+	bins_dict1 = make_horiz_bins(raw_audio1[:rate*match_len], fft_bin_size, overlap, box_height) #bins, overlap, box height
 	boxes1 = make_vert_bins(bins_dict1, box_width)  # box width
 	ft_dict1 = find_bin_max(boxes1, samples_per_box)  # samples per box
-	print "=======================ft_dict1============================="
-	print ft_dict1
+	#print "=======================ft_dict1============================="
+	#print ft_dict1
 
 	# Process second file
 	wavfile2 = extract_audio(av_file)
-	raw_audio2, rate = read_audio(wavfile2)
-	bins_dict2 = make_horiz_bins(raw_audio2[:rate*60], fft_bin_size, overlap, box_height)
+	rate, raw_audio2 = scipy.io.wavfile.read(wavfile2)
+	bins_dict2 = make_horiz_bins(raw_audio2[:rate*match_len], fft_bin_size, overlap, box_height)
 	boxes2 = make_vert_bins(bins_dict2, box_width)
 	ft_dict2 = find_bin_max(boxes2, samples_per_box)
-	print "=======================ft_dict2============================="
-	print ft_dict2
+	#print "=======================ft_dict2============================="
+	#print ft_dict2
 
 	# Determie time delay
 	pairs = find_freq_pairs(ft_dict1, ft_dict2)
+	#print "=======================pairs============================="
+	#print pairs
 	delay = find_delay(pairs)
 	samples_per_sec = float(rate) / float(fft_bin_size)
 	seconds= round(float(delay) / float(samples_per_sec), 4)
@@ -158,71 +163,46 @@ def align(av_base, av_file, fft_bin_size=1024, overlap=0, box_height=512, box_wi
 	else:
 		return (abs(seconds), 0 )
 
-# trim av file
-def trim_av(in_file, seconds, len=''):
-	filename, file_ext = os.path.splitext(in_file)
-	out_file = filename + "_TRIMED" + file_ext
-	time_s = '%.3f' % (seconds) #22.115
-	if len :
-		cmd_line = ["ffmpeg", "-t", len, "-y", "-ss", time_s, "-i", in_file, "-vcodec", "libx264", "-crf", "18", "-c:a", "copy", out_file]
-	else:
-		cmd_line = ["ffmpeg", "-y", "-ss", time_s, "-i", in_file, "-codec", "copy", out_file]
-	print cmd_line
-	call(cmd_line)
-	return out_file
 
-def replace_audio(video_file, wav_file):
-	filename, file_ext = os.path.splitext(video_file)
-	out_file = filename + "_Av" + file_ext
-	cmd_line = ["ffmpeg", "-y", "-i", video_file, "-i", wav_file, "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", 
-"-strict", "experimental",
-	"-map", "0:v", "-map", "1:a", "-shortest", out_file]
-	print cmd_line
-	call(cmd_line)
-
+cmd_line = ["ffmpeg"]
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument('audio', help='audio file ./path/audio_name.ext')
 	parser.add_argument('video', help='video file ./path/video_name.ext')
-	parser.add_argument('-v', help='video file pop sound start second')
-	parser.add_argument('-a', help='audio file pop sound start second')
-	parser.add_argument('-l', help='final video length in second')
-	
+	parser.add_argument('-s', help='offset of video start in second')
+	parser.add_argument('-t', help='final video duration in second')
+	parser.add_argument('-m', help='iOS compatible with iPhone4/iPad/Apple TV 2', action="store_true")
+
+	offset = "0.0"
 	args = parser.parse_args()
-	if args.v :
-		tv = args.v
-		t_file = float(args.v)
-	if args.a :
-		ta = args.a
-		t_base = float(args.a)
-	if args.l :
-		len = args.l
+	if args.s :
+		offset = args.s
 
-	av_base = args.audio
-	av_file = args.video
+	if args.t :
+		len = args.t
+		cmd_line += ["-t", len]
 
-	#av_base = "./media/Waltz_r.wav"
-	#av_file = "./media/Waltz_v1.mp4"
+	av_audio = args.audio
+	av_video = args.video
 
-	if not args.v:
-		t_base, t_file = align(av_base, av_file)
+	a_start, v_start = align(av_audio, av_video)
+	a_start += float(offset);
+	v_start += float(offset);
 
-	if t_base + t_file < 0.2:
-		print "Time difference is less than 0.2 second, no action."
-		quit()
-	av_base_trimed = av_base;
-	av_file_trimed = av_file;
-	if (t_base != 0): #audio
-		print "------ %s will be trimed from %.3f second ---" % (av_base, t_base)
-		av_base_trimed = trim_av(av_base, t_base)
-	if (t_file != 0):
-		print "------ %s will be trimed from %.3f second ---" % (av_file, t_file)
-		av_file_trimed = trim_av(av_file, t_file, len)
-	print "------ Audio start @", t_base, ", video start @", t_file
-	replace_audio(av_file_trimed, av_base_trimed)
+	filename, file_ext = os.path.splitext(av_audio)
+	if args.m :
+		filename += ".m"
+	output = filename + ".mp4"
 
-	# ./align.py ./media/DSC_3554_Ryan_1.wav ./media/DSC_3554.MOV
+	cmd_line += ["-ss", str(a_start), "-i", av_audio, "-ss", str(v_start), "-i", av_video]
+	cmd_line +=	["-c:v", "libx264", "-crf", "18"]
+	if args.m :
+		cmd_line += ["-profile:v", "main", "-level", "3.1", "-vf", "scale=iw/2:-1"]
+	cmd_line += ["-c:a", "aac", "-b:a", "256k", "-strict", "-2"]
+	cmd_line += ["-map", "0:a", "-map", "1:v", "-y", output]
+
+	print ' '.join(str(e) for e in cmd_line)
+	call(cmd_line)
+
+	# ./align.py "./media/DSC_3554_Ryan_1.wav" "./media/DSC_3554.MOV"
 	# ./align.py ./media/DSC_3555_Ryan_2.wav ./media/DSC_3555.MOV
-#ffmpeg -y -t 57 -ss 4.634 -i DSC_3554.MOV -ss 9.535 -i DSC_3554_Ryan_1.wav -c:v libx264 -crf 18 -c:a aac -b:a 256k -map 0:v -map 1:a -shortest -strict -2 DSC_3554_Av.MOV
-
-#ffmpeg -y -t 78 -ss 6.841 -i DSC_3557.MOV -ss 31.380 -i DSC_3557_Eleanor_1.wav -c:v libx264 -crf 18 -c:a aac -b:a 256k -map 0:v -map 1:a -shortest -strict -2 DSC_3557_Av.MOV
