@@ -23,8 +23,8 @@ if __name__ == '__main__':
 	if args.a :
 		a_start = args.a
 	if args.t :
-		len = args.t
-		cmd_line += ["-t", len]
+		out_len = args.t
+		cmd_line += ["-t", out_len]
 
 	av_audio = args.audio
 	av_video = args.video

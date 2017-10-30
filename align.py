@@ -15,53 +15,40 @@ def extract_audio(in_file):
 	call(cmd_line)
 	return output
 
+# build freq chart
+#{ band 0: [(i00, 0, 0), (i01, 0, 1), ... (i01, 0, 511), (i10, 1, 0), (i11, 1, 1), ... (i11, 1, 511, ...), ...], band 1: [...], ...}
 def make_horiz_bins(data, fft_bin_size, overlap, box_height):
 	horiz_bins = {}
-	# process first sample and set matrix height
-	sample_data = data[0:fft_bin_size]  # get data for first sample
-	if (len(sample_data) == fft_bin_size):  # if there are enough audio points left to create a full fft bin
-		intensities = fourier(sample_data)  # intensities is list of fft results
-		for i in range(len(intensities)):
-			box_y = i/box_height
-			if horiz_bins.has_key(box_y):
-				horiz_bins[box_y].append((intensities[i], 0, i))  # (intensity, x, y)
-			else:
-				horiz_bins[box_y] = [(intensities[i], 0, i)]
-	# process remainder of samples
-	x_coord_counter = 1  # starting at second sample, with x index 1
-	for j in range(int(fft_bin_size - overlap), len(data), int(fft_bin_size-overlap)):
+	x_coord_counter = 0
+	for j in range(0, len(data) - fft_bin_size, int(fft_bin_size - overlap)):
 		sample_data = data[j:j + fft_bin_size]
-		if (len(sample_data) == fft_bin_size):
-			intensities = fourier(sample_data)
-			for k in range(len(intensities)):
-				box_y = k/box_height
-				if horiz_bins.has_key(box_y):
-					horiz_bins[box_y].append((intensities[k], x_coord_counter, k))  # (intensity, x, y)
-				else:
-					horiz_bins[box_y] = [(intensities[k], x_coord_counter, k)]
+		intensities = fourier(sample_data) # =>list of 512 intensities
+		for k in range(len(intensities)):
+			box_y = k/box_height # box_y always 0, as box_height = 512
+			if horiz_bins.has_key(box_y):
+				horiz_bins[box_y].append((intensities[k], x_coord_counter, k))  # (intensity, x, y)
+			else:
+				horiz_bins[box_y] = [(intensities[k], x_coord_counter, k)]
 		x_coord_counter += 1
 
 	return horiz_bins
 
-
 # Compute the one-dimensional discrete Fourier Transform
-# INPUT: list with length of number of samples per second
-# OUTPUT: list of real values len of num samples per second
+# INPUT: list of samples of fft_bin_size
 def fourier(sample):  #, overlap):
-	mag = []
 	fft_data = np.fft.fft(sample)  # Returns real and complex value pairs
-	for i in range(len(fft_data)/2):
-		r = fft_data[i].real**2
-		j = fft_data[i].imag**2
-		mag.append(round(math.sqrt(r+j),2))
-
+	half_len = len(fft_data) / 2
+	mag = np.round(abs(fft_data[:half_len]), 2)
+	#print "--------->\n", mag[:half_len]
 	return mag
 
-
+# seperate horiz_bins by every second
 def make_vert_bins(horiz_bins, box_width):
 	boxes = {}
 	for key in horiz_bins.keys():
 		for i in range(len(horiz_bins[key])):
+			# box_width=43, => 43*1024/44.1 = 0.9985 second
+			# box_x is time in second
 			box_x = horiz_bins[key][i][1] / box_width
 			if boxes.has_key((box_x,key)):
 				boxes[(box_x,key)].append((horiz_bins[key][i]))
@@ -74,16 +61,16 @@ def make_vert_bins(horiz_bins, box_width):
 # freqs_dict = { freq 0: [t01, t02...], freq 1:[t11, t12, ...], freq x:[tx1, tx2, ....]
 def find_bin_max(boxes, maxes_per_box):
 	freqs_dict = {}
-	for key in boxes.keys(): # for every freq in boxes
+	for key in boxes.keys(): # for every second in boxes
 		max_intensities = [(1,2,3)] # [(intensity, x, y)]
-		for i in range(len(boxes[key])): # for every t in given freq
+		for i in range(len(boxes[key])): # for every t in given second
 			if boxes[key][i][0] > min(max_intensities)[0]:
 				if len(max_intensities) < maxes_per_box:  # add if < number of points per box
 					max_intensities.append(boxes[key][i])
 				else:  # else add new number and remove min
 					max_intensities.append(boxes[key][i])
 					max_intensities.remove(min(max_intensities))
-		# add max_intensities of the freq (num < maxes_per_box) to freq dict
+		# add intensities of this second (num < maxes_per_box) to freq dict
 		for j in range(len(max_intensities)):
 			if freqs_dict.has_key(max_intensities[j][2]):
 				freqs_dict[max_intensities[j][2]].append(max_intensities[j][1])
@@ -124,14 +111,14 @@ def find_delay(time_pairs):
 	t_diffs_sorted = sorted(t_diffs.items(), key=lambda x: x[1])
 
 	for t in t_diffs_sorted[-10:]:
-		print "Time diff: %4d K samples, hit %3d times" % (t[0], t[1])
+		print "Time diff = %4d K samples, hit %3d times" % (t[0], t[1])
 
 	time_delay = t_diffs_sorted[-1][0]
 
 	return time_delay
 
 # Find time delay between two files
-def align(av_base, av_file, fft_bin_size=1024, overlap=0, box_height=512, box_width=43, samples_per_box=7, match_len=30):
+def align(av_base, av_file, fft_bin_size=1024, overlap=0, box_height=512, box_width=43, samples_per_box=7, match_len=120):
 	# Process first file
 	wavfile1 = extract_audio(av_base)
 	rate, raw_audio1 = scipy.io.wavfile.read(wavfile1)
@@ -151,8 +138,8 @@ def align(av_base, av_file, fft_bin_size=1024, overlap=0, box_height=512, box_wi
 	#print ft_dict2
 
 	# Determie time delay
+	print "======================= Determie time delay ============================="
 	pairs = find_freq_pairs(ft_dict1, ft_dict2)
-	#print "=======================pairs============================="
 	#print pairs
 	delay = find_delay(pairs)
 	samples_per_sec = float(rate) / float(fft_bin_size)
@@ -179,8 +166,8 @@ if __name__ == '__main__':
 		offset = args.s
 
 	if args.t :
-		len = args.t
-		cmd_line += ["-t", len]
+		out_len = args.t
+		cmd_line += ["-t", out_len]
 
 	av_audio = args.audio
 	av_video = args.video
