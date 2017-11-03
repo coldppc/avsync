@@ -11,7 +11,11 @@ sudo apt-get install python-numpy python-scipy
 
 -- example
 $ avsync/mix.py DSC_3554_Ryan_1.wav DSC_3554.MOV -a 9.435 -v 4.634 -t 57 -m
+$ ./align.py ./media/DSC_3555_Ryan_2.wav ./media/DSC_3555.MOV -s 6.0 -t 60 -m
 
-reference
+-- reference
 
 https://raw.githubusercontent.com/allisonnicoledeal/VideoSync/master/alignment_by_row_channels.py
+
+-- Next step
+Build and test https://github.com/protyposis/AudioAlign
