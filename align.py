@@ -156,6 +156,7 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument('audio', help='audio file ./path/audio_name.ext')
 	parser.add_argument('video', help='video file ./path/video_name.ext')
+	parser.add_argument('-a_delay', help='adjust audio output delay in second. (0.041)')
 	parser.add_argument('-s', help='offset of video start in second')
 	parser.add_argument('-t', help='final video duration in second')
 	parser.add_argument('-m', help='iOS compatible with iPhone4/iPad/Apple TV 2', action="store_true")
@@ -175,6 +176,9 @@ if __name__ == '__main__':
 	a_start, v_start = align(av_audio, av_video)
 	a_start += float(offset);
 	v_start += float(offset);
+	
+	if args.a_delay :
+		a_start -= float(args.a_delay)
 
 	filename, file_ext = os.path.splitext(av_audio)
 	if args.m :
