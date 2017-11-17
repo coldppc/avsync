@@ -13,6 +13,9 @@ from datetime import datetime
 mice_q = Queue.Queue()
 
 alsa_pid = '/tmp/alsa.pid '
+SUDO = '' # needed in PC
+DIR = '/nas/'
+
 global gExit
 gExit = False
 
@@ -38,20 +41,20 @@ def get_mice_event(f_mice):
 	return bLeft, bRight
 
 def aplay_cmd():
-	cmd = 'sudo aplay -v -D hw:CARD=USB,DEV=0 -i --process-id-file ' + alsa_pid
+	cmd = SUDO + ' aplay -v -D hw:CARD=USB,DEV=0 -i --process-id-file ' + alsa_pid
 	cmd += last_wav
 	return cmd
 	
 def arecord_cmd() :
 	global last_wav
 	dt = datetime.now()
-	cmd = 'sudo arecord -v -f S32_LE -c 2 -r 48000 -D hw:CARD=USB,DEV=0 --process-id-file ' + alsa_pid
-	last_wav = dt.strftime("%Y%m%d_%H%M%S.wav")
+	cmd = SUDO + ' arecord -v -f S32_LE -c 2 -r 48000 -D hw:CARD=USB,DEV=0 --process-id-file ' + alsa_pid
+	last_wav = DIR + dt.strftime("%Y%m%d_%H%M%S.wav")
 	cmd += last_wav
 	return cmd
 
 def kill_cmd():
-	cmd = 'sudo kill -9 `cat ' + alsa_pid + '`'
+	cmd = SUDO + ' kill -9 `cat ' + alsa_pid + '`'
 	return cmd
 
 def worker_cmd(cmd):
@@ -64,7 +67,15 @@ def worker_cmd(cmd):
 def exec_cmd(cmd):
 	t_cmd = threading.Thread( target = worker_cmd, args = (cmd,))
 	t_cmd.start()
-	
+
+def switch_led_state():
+	if gState == 'IDLE' :
+		call ('echo none > /sys/class/leds/led0/trigger', shell=True)		
+	elif gState == 'RECORD' :
+		call ('echo heartbeat > /sys/class/leds/led0/trigger', shell=True)
+	elif gState == 'PLAY' :
+		call ('echo default-on > /sys/class/leds/led0/trigger', shell=True)
+
 def state_machine(left, right) :
 	global gState
 	state_old = gState
@@ -92,11 +103,13 @@ def state_machine(left, right) :
 	else :
 		return
 	if gState != state_old :
+		switch_led_state()
 		print gState
 
 def worker_ctrl():
 	worker = sys._getframe().f_code.co_name
 	print worker + " starting..."
+	switch_led_state()
 	while not gExit:
 		while not mice_q.empty() :
 			left, right = mice_q.get()
