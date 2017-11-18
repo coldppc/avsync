@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+#  * *  *   *   *     /usr/bin/flock -n /run/mice.lockfile /usr/bin/python -u /root/avsync/mice.py >> /nas/cronlog 2>&1
 import sys
 import struct
 from subprocess import call
@@ -12,7 +12,7 @@ from datetime import datetime
 
 mice_q = Queue.Queue()
 
-alsa_pid = '/tmp/alsa.pid '
+alsa_pid = '/run/alsa.pid '
 SUDO = '' # needed in PC
 DIR = '/nas/'
 
@@ -28,6 +28,8 @@ last_wav = ''
 def handler(signum, frame):
 	global gExit
 	print 'Signal handler called with signal', signum
+	with open('/sys/class/leds/led0/trigger', 'w') as text:
+		text.write('mmc0')
 	gExit = True
 
 def get_mice_event(f_mice):
@@ -54,27 +56,29 @@ def arecord_cmd() :
 	return cmd
 
 def kill_cmd():
-	cmd = SUDO + ' kill -9 `cat ' + alsa_pid + '`'
+	cmd = SUDO + ' pkill -9 -F ' + alsa_pid
 	return cmd
 
 def worker_cmd(cmd):
-	worker = sys._getframe().f_code.co_name
-	print worker + " starting..."
-	print cmd
-	call (cmd, shell=True)
-	print worker + " done!"
+	words = cmd.split()
+	print ' '.join(str(e) for e in words)
+	call (words)
 	
 def exec_cmd(cmd):
+	print "Exec command line in background ..."
 	t_cmd = threading.Thread( target = worker_cmd, args = (cmd,))
 	t_cmd.start()
 
 def switch_led_state():
 	if gState == 'IDLE' :
-		call ('echo none > /sys/class/leds/led0/trigger', shell=True)		
+	        with open('/sys/class/leds/led0/trigger', 'w') as text:
+        	        text.write('default-on')
 	elif gState == 'RECORD' :
-		call ('echo heartbeat > /sys/class/leds/led0/trigger', shell=True)
+	        with open('/sys/class/leds/led0/trigger', 'w') as text:
+        	        text.write('heartbeat')
 	elif gState == 'PLAY' :
-		call ('echo default-on > /sys/class/leds/led0/trigger', shell=True)
+	        with open('/sys/class/leds/led0/trigger', 'w') as text:
+        	        text.write('none')
 
 def state_machine(left, right) :
 	global gState
