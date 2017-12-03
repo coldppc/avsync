@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#  * *  *   *   *     /usr/bin/flock -n /run/mice.lockfile /usr/bin/python -u /home/sxfan/avsync/mice.py >> /nas/cronlog 2>&1
+#  * *  *   *   *     /usr/bin/flock -n /run/mice.lockfile /usr/bin/python -u /home/sxfan/avsync/rec_key.py >> /nas/cronlog 2>&1
 import sys
 import struct
 from subprocess import call
@@ -9,8 +9,9 @@ import Queue
 import select
 import signal, os
 from datetime import datetime
+import evdev
 
-mice_q = Queue.Queue()
+key_q = Queue.Queue()
 
 alsa_pid = '/run/alsa.pid '
 SUDO = '' # needed in PC
@@ -79,28 +80,33 @@ def switch_led_state():
 	elif gState == 'PLAY' :
 	        with open('/sys/class/leds/led0/trigger', 'w') as text:
         	        text.write('none')
-
-def state_machine(left, right) :
+CODE_STAR = 55
+CODE_DIV = 98
+def state_machine(keys) :
 	global gState
+
+	if len(keys) == 0:
+		return
+
 	state_old = gState
 	if gState == 'IDLE' :
-		if left and not right :
+		if keys[0] == CODE_STAR:
 			gState = 'RECORD'
 			cmd_line = arecord_cmd()
 			exec_cmd(cmd_line)
-		elif left and right :
+		elif keys[0] == CODE_DIV :
 			if last_wav == '' : # nothing to play
 				return
 			gState = 'PLAY'
 			cmd_line = aplay_cmd()
 			exec_cmd(cmd_line)
 	elif gState == 'RECORD' :
-		if right and not left :
+		if keys[0] == CODE_STAR:
 			gState = 'IDLE'
 			cmd_line = kill_cmd()
 			exec_cmd(cmd_line)
 	elif gState == 'PLAY' :
-		if left and right :
+		if keys[0] == CODE_DIV :
 			gState = 'IDLE'
 			cmd_line = kill_cmd()
 			exec_cmd(cmd_line)
@@ -115,34 +121,49 @@ def worker_ctrl():
 	print worker + " starting..."
 	switch_led_state()
 	while not gExit:
-		while not mice_q.empty() :
-			left, right = mice_q.get()
-			print "LEFT/RIGHT: ", left, right
-			state_machine(left, right)
-			mice_q.task_done
+		while not key_q.empty() :
+			keys = key_q.get()
+			state_machine(keys)
+			key_q.task_done
 	print worker + " done!"
 
 def worker_mice():
+        worker = sys._getframe().f_code.co_name
+        print worker + " starting..."
+        f_mice = open( "/dev/input/mice", "rb" )
+        left = left_old = False
+        right = right_old = False
+        timeout = 0.2
+        while not gExit:
+                rlist, wlist, xlist = select.select([f_mice.fileno()], [], [], timeout)
+                if len(rlist) == 0 :
+                        # timeout, key is stable
+                        if (left_old != left) or (right_old != right) :
+                                # generate event only when something changed
+                                mice_q.put( (left,right) )
+                                left_old = left
+                                right_old = right
+                else:
+                        # readable
+                        left, right = get_mice_event(f_mice)
+
+        f_mice.close()
+        print worker + " done!"
+
+def worker_key():
 	worker = sys._getframe().f_code.co_name
 	print worker + " starting..."
-	f_mice = open( "/dev/input/mice", "rb" )
-	left = left_old = False
-	right = right_old = False
-	timeout = 0.2
-	while not gExit:
-		rlist, wlist, xlist = select.select([f_mice.fileno()], [], [], timeout)
-		if len(rlist) == 0 :
-			# timeout, key is stable
-			if (left_old != left) or (right_old != right) :
-				# generate event only when something changed
-				mice_q.put( (left,right) )
-				left_old = left
-				right_old = right
-		else:
-			# readable
-			left, right = get_mice_event(f_mice)
 
-	f_mice.close()
+	dev = evdev.InputDevice('/dev/input/event0')
+	print dev
+
+	last_keys = []
+	while not gExit:
+		keys = dev.active_keys()
+		if keys != last_keys:
+			print keys
+			key_q.put(keys)
+		time.sleep(0.2)
 	print worker + " done!"
 
 
@@ -152,7 +173,7 @@ if __name__ == '__main__':
 	signal.signal(signal.SIGINT, handler)
 
 	t_ctrl = threading.Thread( target = worker_ctrl )
-	t_mice = threading.Thread( target = worker_mice )
+	t_mice = threading.Thread( target = worker_key )
 	t_mice.start()
 	t_ctrl.start()
 
