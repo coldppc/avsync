@@ -33,16 +33,6 @@ def handler(signum, frame):
 		text.write('mmc0')
 	gExit = True
 
-def get_mice_event(f_mice):
-	buf = f_mice.read(3)
-	button = ord( buf[0] )
-	bLeft = (button & 0x1) > 0
-	bMiddle = ( button & 0x4 ) > 0
-	bRight = ( button & 0x2 ) > 0
-	x,y = struct.unpack( "bb", buf[1:] )
-	#print ("L:%d, M: %d, R: %d, x: %d, y: %d\n" % (bLeft, bMiddle, bRight, x, y) )
-	return bLeft, bRight
-
 def aplay_cmd():
 	cmd = SUDO + ' aplay -v -D hw:CARD=USB,DEV=0 -i --process-id-file ' + alsa_pid
 	cmd += last_wav
@@ -80,8 +70,6 @@ def switch_led_state():
 	elif gState == 'PLAY' :
 	        with open('/sys/class/leds/led0/trigger', 'w') as text:
         	        text.write('none')
-CODE_STAR = 55
-CODE_DIV = 98
 def state_machine(keys) :
 	global gState
 
@@ -90,23 +78,23 @@ def state_machine(keys) :
 
 	state_old = gState
 	if gState == 'IDLE' :
-		if keys[0] == CODE_STAR:
+		if keys[0] == evdev.ecodes.KEY_KPASTERISK:
 			gState = 'RECORD'
 			cmd_line = arecord_cmd()
 			exec_cmd(cmd_line)
-		elif keys[0] == CODE_DIV :
+		elif keys[0] == evdev.ecodes.KEY_KPSLASH :
 			if last_wav == '' : # nothing to play
 				return
 			gState = 'PLAY'
 			cmd_line = aplay_cmd()
 			exec_cmd(cmd_line)
 	elif gState == 'RECORD' :
-		if keys[0] == CODE_STAR:
+		if keys[0] ==  evdev.ecodes.KEY_KPASTERISK:
 			gState = 'IDLE'
 			cmd_line = kill_cmd()
 			exec_cmd(cmd_line)
 	elif gState == 'PLAY' :
-		if keys[0] == CODE_DIV :
+		if keys[0] == evdev.ecodes.KEY_KPSLASH :
 			gState = 'IDLE'
 			cmd_line = kill_cmd()
 			exec_cmd(cmd_line)
@@ -125,46 +113,29 @@ def worker_ctrl():
 			keys = key_q.get()
 			state_machine(keys)
 			key_q.task_done
+		time.sleep(0.05)
 	print worker + " done!"
 
-def worker_mice():
+def worker_key():
         worker = sys._getframe().f_code.co_name
         print worker + " starting..."
-        f_mice = open( "/dev/input/mice", "rb" )
-        left = left_old = False
-        right = right_old = False
-        timeout = 0.2
-        while not gExit:
-                rlist, wlist, xlist = select.select([f_mice.fileno()], [], [], timeout)
-                if len(rlist) == 0 :
-                        # timeout, key is stable
-                        if (left_old != left) or (right_old != right) :
-                                # generate event only when something changed
-                                mice_q.put( (left,right) )
-                                left_old = left
-                                right_old = right
-                else:
-                        # readable
-                        left, right = get_mice_event(f_mice)
-
-        f_mice.close()
-        print worker + " done!"
-
-def worker_key():
-	worker = sys._getframe().f_code.co_name
-	print worker + " starting..."
 
 	dev = evdev.InputDevice('/dev/input/event0')
 	print dev
 
-	last_keys = []
-	while not gExit:
-		keys = dev.active_keys()
-		if keys != last_keys:
-			print keys
-			key_q.put(keys)
-		time.sleep(0.2)
-	print worker + " done!"
+        timeout = 0.05
+        while not gExit:
+                rlist, wlist, xlist = select.select([dev], [], [], timeout)
+                if len(rlist) == 0 : # timeout
+			continue
+		for event in dev.read():
+			if event.type == evdev.ecodes.EV_KEY:
+				print (evdev.categorize(event))
+#key event at 1512371912.657925, 98 (KEY_KPSLASH), up
+#key event at 1512371913.425918, 55 (KEY_KPASTERISK), down
+				if event.value == 1 : # down
+					key_q.put([event.code])
+        print worker + " done!"
 
 
 if __name__ == '__main__':
