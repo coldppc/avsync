@@ -156,19 +156,17 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument('audio', help='audio file ./path/audio_name.ext')
 	parser.add_argument('video', help='video file ./path/video_name.ext')
-	parser.add_argument('-a_delay', help='adjust audio output delay in second. (0.041)')
+	parser.add_argument('-a_delay', help='adjust audio delay in second. (default=0.082)', dest='a_delay', default=0.082)
 	parser.add_argument('-s', help='offset of video start in second')
 	parser.add_argument('-t', help='final video duration in second')
 	parser.add_argument('-m', help='iOS compatible with iPhone4/iPad/Apple TV 2', action="store_true")
 
-	offset = "0.0"
 	args = parser.parse_args()
+	print args
+
+	offset = "0.0"
 	if args.s :
 		offset = args.s
-
-	if args.t :
-		out_len = args.t
-		cmd_line += ["-t", out_len]
 
 	av_audio = args.audio
 	av_video = args.video
@@ -176,7 +174,7 @@ if __name__ == '__main__':
 	a_start, v_start = align(av_audio, av_video)
 	a_start += float(offset);
 	v_start += float(offset);
-	
+
 	if args.a_delay :
 		a_start -= float(args.a_delay)
 
@@ -190,6 +188,11 @@ if __name__ == '__main__':
 	if args.m :
 		cmd_line += ["-profile:v", "main", "-level", "3.1", "-vf", "scale=iw/2:-1"]
 	cmd_line += ["-c:a", "aac", "-b:a", "256k", "-strict", "-2"]
+
+	if args.t :
+		out_len = args.t
+		cmd_line += ["-t", out_len]
+
 	cmd_line += ["-map", "0:a", "-map", "1:v", "-y", output]
 
 	print ' '.join(str(e) for e in cmd_line)
