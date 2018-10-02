@@ -156,13 +156,12 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument('audio', help='audio file ./path/audio_name.ext')
 	parser.add_argument('video', help='video file ./path/video_name.ext')
-	parser.add_argument('-a_delay', help='adjust audio delay in second. (default=0.082)', dest='a_delay', default=0.082)
+	parser.add_argument('-a_delay', help='adjust audio output delay. (default=0.0417 24fps)', dest='a_delay', default=0.0417)
 	parser.add_argument('-s', help='offset of video start in second')
 	parser.add_argument('-t', help='final video duration in second')
 	parser.add_argument('-m', help='iOS compatible with iPhone4/iPad/Apple TV 2', action="store_true")
 
 	args = parser.parse_args()
-	print args
 
 	offset = "0.0"
 	if args.s :
@@ -183,8 +182,9 @@ if __name__ == '__main__':
 		filename += ".m"
 	output = filename + ".mp4"
 
-	cmd_line += ["-ss", str(a_start), "-i", av_audio, "-ss", str(v_start), "-i", av_video]
-	cmd_line +=	["-c:v", "libx264", "-crf", "18"]
+	cmd_line += ["-ss", str(a_start), "-i", av_audio, "-ss", str(v_start)]
+
+	cmd_line +=	["-i", av_video, "-c:v", "libx264", "-crf", "18"]
 	if args.m :
 		cmd_line += ["-profile:v", "main", "-level", "3.1", "-vf", "scale=iw/2:-1"]
 	cmd_line += ["-c:a", "aac", "-b:a", "256k", "-strict", "-2"]
