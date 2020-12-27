@@ -1,29 +1,24 @@
 #!/usr/bin/env python
 #  * *  *   *   *     /usr/bin/flock -n /run/mice.lockfile /usr/bin/python -u /home/sxfan/avsync/rec_key.py >> /nas/cronlog 2>&1
-import sys
-import struct
-from subprocess import call
+
+import queue
+import select
+import signal
 import threading
 import time
-import Queue
-import select
-import signal, os
 from datetime import datetime
+from subprocess import call
+
 import evdev
 
-key_q = Queue.Queue()
+key_q = queue.Queue()
 
 alsa_pid = '/run/alsa.pid '
 SUDO = ''  # needed in PC
 DIR = '/nas/'
 
-global gExit
 gExit = False
-
-global gState
 gState = 'IDLE'  # idle,  play, record
-
-global last_wav
 last_wav = ''
 
 
@@ -122,7 +117,8 @@ def worker_ctrl():
         while not key_q.empty():
             keys = key_q.get()
             state_machine(keys)
-            key_q.task_done
+            key_q.task_done()
+
         time.sleep(0.05)
     print(worker + " done!")
 
